@@ -6,7 +6,15 @@ import { name } from "./package.json";
 
 export default {
     input: "src/stockdata.js",
-    external: ["moment", "lodash", "axios", "lib-flowcontrol", "lib-tushare"],
+    external: [
+        "moment",
+        "lodash",
+        "axios",
+        "@wt/lib-flowcontrol",
+        "@wt/lib-tushare",
+        "@wt/lib-taskqueue",
+        "@babel/runtime",
+    ],
     plugins: [
         resolve(),
         babel({
