@@ -104,7 +104,7 @@ async function updateStockInfoData(dataName, tsCode, force = false) {
                     stockData.data && stockData.data.length
                 }`
             );
-            let startDate = "";
+            let startDate = null;
             if (stockData.data && stockData.data.length > 0) {
                 let lastDate = stockData.endDate;
                 startDate = moment(lastDate, "YYYYMMDD")
@@ -113,16 +113,27 @@ async function updateStockInfoData(dataName, tsCode, force = false) {
                 let now = moment();
                 if (now.diff(startDate, "days") <= 0 && now.hours() < 15) {
                     // 还没有最新一天的数据，不需要
-                    logger.log(`没有新的数据，不需要更新 ${tsCode}`);
+                    logger.info(
+                        `${tsCode}没有新的数据${dataName}，不需要更新, 已有数据${
+                            stockData.data && stockData.data.length
+                        }条`,
+                        stockData
+                    );
                     return;
                 }
             }
 
+            logger.info(`${tsCode}查询数据${dataName}，参数：${startDate}`);
             let [
                 newData,
                 endDate,
                 queryStartDate,
             ] = await tushare.queryStockInfo(dataName, tsCode, startDate);
+            logger.info(
+                `${tsCode}查询数据${dataName}，参数：${startDate}，返回：${
+                    newData && newData.length
+                }条，${endDate}, ${queryStartDate}`
+            );
 
             // 如果通过查询获得的数据不存在，需要更新一下startDate
             if (stockData && !stockData.startDate) {
@@ -710,16 +721,28 @@ async function calculateDailyData(tsCode) {
     logger.info(`${tsCode}日线数据合并完成！`);
 }
 
-function calculatePrevAdjPrice(dailyData) {
+function calculatePrevAdjPrice(dailyData, digits = 3) {
     if (dailyData && dailyData.data && dailyData.data.length > 0) {
         dailyData.data.forEach((item) => {
             if (item.prevadj_factor) {
-                item.open *= item.prevadj_factor;
-                item.close *= item.prevadj_factor;
-                item.high *= item.prevadj_factor;
-                item.low *= item.prevadj_factor;
-                item.prev_close *= item.prevadj_factor;
-                item.change *= item.prevadj_factor;
+                item.open = Number(
+                    (item.open * item.prevadj_factor).toFixed(digits)
+                );
+                item.close = Number(
+                    (item.close * item.prevadj_factor).toFixed(digits)
+                );
+                item.high = Number(
+                    (item.high * item.prevadj_factor).toFixed(digits)
+                );
+                item.low = Number(
+                    (item.low * item.prevadj_factor).toFixed(digits)
+                );
+                item.pre_close = Number(
+                    (item.pre_close * item.prevadj_factor).toFixed(digits)
+                );
+                item.change = Number(
+                    (item.change * item.prevadj_factor).toFixed(digits)
+                );
             }
         });
     }
@@ -743,7 +766,14 @@ function removeIncludedData(data) {
                 // 内移日 这一天数据去除，也不需要和后续比较
             } else {
                 // 非内移日
-                let tmp = [currentItem.trade_date, null, 0, currentItem];
+                // 构造趋势数据的基本结构，数组方式[交易日，价格，类型，最高，最低]，其中价格根据类型为高点或者低点，对应当日的最高和最低值
+                let tmp = [
+                    currentItem.trade_date,
+                    null,
+                    0,
+                    currentItem.high,
+                    currentItem.low,
+                ];
                 ret.push(tmp);
                 index = currentIndex;
                 item = currentItem;
@@ -775,14 +805,14 @@ function calculateNextTrendPoints(data) {
 
         if (
             (item[2] === 0 &&
-                item[3].high >= data[index - 1][3].high &&
-                item[3].high >= data[index + 1][3].high) ||
+                item[3] >= data[index - 1][3] &&
+                item[3] >= data[index + 1][3]) ||
             (item[2] === 1 &&
                 item[1] >= data[index - 2][1] &&
                 item[1] >= data[index + 2][1])
         ) {
             // 发现高点
-            tmp = [item[0], item[3].high, 1, item[3]];
+            tmp = [item[0], item[3], 1, item[3], item[4]];
             logger.debug(`找到高点，序号${index}, %o`, item);
             if (lastType === 1) {
                 logger.debug(
@@ -802,14 +832,14 @@ function calculateNextTrendPoints(data) {
         }
         if (
             (item[2] === 0 &&
-                item[3].low <= data[index - 1][3].low &&
-                item[3].low <= data[index + 1][3].low) ||
+                item[4] <= data[index - 1][4] &&
+                item[4] <= data[index + 1][4]) ||
             (item[2] === -1 &&
                 item[1] <= data[index - 2][1] &&
                 item[1] <= data[index + 2][1])
         ) {
             // 发现低点
-            tmp = [item[0], item[3].low, -1, item[3]];
+            tmp = [item[0], item[4], -1, item[3], item[4]];
             logger.debug(`发现低点，序号${index}, %o`, item);
             if (lastType === -1) {
                 logger.debug(
@@ -839,10 +869,14 @@ function calculateNextTrendPoints(data) {
 /**
  * 根据当前数据计算日短期趋势
  * data输入为原始数据，在做短期高点和低点前，先去除内移交易日
+ *
+ * 最终的趋势数据保存在文件中，文件会包含完整前复权处理的日线数据和三级趋势数据
  */
 async function calculateTrendPoints(tsCode) {
     if (_.isEmpty(tsCode)) return;
     let dailyData = await readStockData(stockDataNames.daily, tsCode);
+    // 对日数据处理前复权因子计算，处理后的数据为基准
+    calculatePrevAdjPrice(dailyData);
 
     logger.debug(
         `去除内移交易日..., ${
@@ -850,8 +884,6 @@ async function calculateTrendPoints(tsCode) {
         }`
     );
     let indata = removeIncludedData(dailyData.data);
-    dailyData.data = null;
-    dailyData = null;
     let trendPoints = [];
 
     // 从基础数据循环3次，分别获得短期，中期和长期趋势
@@ -864,10 +896,22 @@ async function calculateTrendPoints(tsCode) {
     logger.info(`${tsCode}趋势数据计算完毕！`);
 
     try {
+        logger.info(
+            `保存数据信息：${tsCode}, 日期 ${
+                dailyData && dailyData.startDate
+            } ～ ${dailyData && dailyData.endDate}, 日线数据${
+                dailyData && dailyData.data.length
+            }条，短期${trendPoints[0].length}, 中期 ${
+                trendPoints[1].length
+            }, 长期 ${trendPoints[2].length}`
+        );
         let stockData = {
             updateTime: moment().toISOString(),
-            ts_code: tsCode,
-            data: trendPoints,
+            tsCode,
+            startDate: dailyData.startDate,
+            endDate: dailyData.endDate,
+            data: dailyData.data,
+            trends: trendPoints,
         };
         let dataName = "trend";
 
@@ -886,9 +930,11 @@ async function calculateTrendPoints(tsCode) {
         );
     } catch (error) {
         throw new Error(
-            `保存个股${tsCode}数据${dataName}时出现错误，请检查后重新执行：${error}`
+            `保存个股${tsCode}趋势数据时出现错误，请检查后重新执行：${error}`
         );
     }
+    dailyData.data = null;
+    dailyData = null;
     indata = null;
 
     // return trendPoints;
@@ -931,7 +977,6 @@ export {
     clearAllData,
     updateData,
     updateStockInfoData,
-    // updateStockDividendData,
     calculateAllDailyData,
     calculateDailyData,
     calculateAllTrendPoints,
