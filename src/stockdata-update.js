@@ -4,6 +4,17 @@
  * 2.
  */
 
+const {
+    readStockList,
+    readStockData,
+    getDataRoot,
+    getStockDataFile,
+    DATA_PATH,
+    STOCKLIST_FILE,
+    INDEXLIST_FILE,
+    stockDataNames,
+} = require("@wt/lib-wtda-query");
+
 const _ = require("lodash");
 const moment = require("moment");
 const executeTasks = require("@wt/lib-taskqueue");
@@ -20,17 +31,6 @@ const logger = pino({
     },
     prettifier: require("pino-pretty"),
 });
-
-import {
-    readStockList,
-    readStockData,
-    getDataRoot,
-    getStockDataFile,
-    DATA_PATH,
-    STOCKLIST_FILE,
-    INDEXLIST_FILE,
-    stockDataNames,
-} from "./stockdata-query";
 
 // const os = require("os")
 const path = require("path");

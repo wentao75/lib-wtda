@@ -5,11 +5,13 @@ import commonjs from "@rollup/plugin-commonjs";
 import { name } from "./package.json";
 
 export default {
-    input: "src/stockdata.js",
+    input: "src/stockdata-update.js",
     external: [
         "moment",
         "lodash",
+        "pino",
         "axios",
+        "@wt/lib-wtda-query",
         "@wt/lib-flowcontrol",
         "@wt/lib-tushare",
         "@wt/lib-taskqueue",
