@@ -1,0 +1,21 @@
+#!/bin/zsh
+cd ../..
+cd lib-flowcontrol
+yarn
+yarn build
+
+cd ../lib-taskqueue
+yarn
+yarn build
+
+cd ../lib-tushare
+yarn
+yarn build
+
+cd ../lib-wtda-query
+yarn
+yarn build
+
+cd ../lib-wtda
+yarn
+yarn build
