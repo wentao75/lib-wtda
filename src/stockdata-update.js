@@ -794,7 +794,7 @@ function calculateNextTrendPoints(data) {
     // let nextType = 0
     // 这里考虑使用forEach是否并行过多？
     //data.forEach((item, index, array) => {
-    for (let index = 2; index < data.length - 2; index++) {
+    for (let index = 1; index < data.length - 1; index++) {
         let item = data[index];
         //if (index <= 1 || index >= array.length - 2) return;
         let tmp = null;
@@ -803,11 +803,21 @@ function calculateNextTrendPoints(data) {
         let lastType = lastPoint !== null ? lastPoint[2] : 0;
         // findPoints.length > 0 ? findPoints[findPoints.length - 1][2] : 0
 
+        logger.debug(
+            `执行检查 序号：${index}， %o, 前一点 %o, 后一点 %o, 前2点 %o, 后2点 %o`,
+            item,
+            data[index - 1],
+            data[index + 1],
+            data[index - 2],
+            data[index + 2]
+        );
         if (
             (item[2] === 0 &&
                 item[3] >= data[index - 1][3] &&
                 item[3] >= data[index + 1][3]) ||
             (item[2] === 1 &&
+                index - 2 >= 0 &&
+                index + 2 < data.length &&
                 item[1] >= data[index - 2][1] &&
                 item[1] >= data[index + 2][1])
         ) {
@@ -835,6 +845,8 @@ function calculateNextTrendPoints(data) {
                 item[4] <= data[index - 1][4] &&
                 item[4] <= data[index + 1][4]) ||
             (item[2] === -1 &&
+                index - 2 >= 0 &&
+                index + 2 < data.length &&
                 item[1] <= data[index - 2][1] &&
                 item[1] <= data[index + 2][1])
         ) {
