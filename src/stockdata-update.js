@@ -192,6 +192,7 @@ async function saveStockDataFile(stockData, dataName, tsCode) {
  */
 async function updateData(
     force = false,
+    updateDaily = false,
     updateStock = false,
     updateFinance = false,
     updateMainbiz = false,
@@ -199,11 +200,15 @@ async function updateData(
     updatePledge = false,
     updateIndex = false
 ) {
-    logger.debug(
-        `参数：强制更新 ${force}, 更新股票信息数据 ${updateStock}, 更新股票财务数据 ${updateFinance}, 更新主营业务构成 ${updateMainbiz}, 更新分红送股 ${updateDividend}, 更新股权质押数据 ${updatePledge}，更新指数数据 ${updateIndex}`
+    logger.info(
+        `参数：强制更新 ${force}, 更新股票日线数据 ${updateDaily}, 更新股票信息数据 ${updateStock}, 更新股票财务数据 ${updateFinance}, 更新主营业务构成 ${updateMainbiz}, 更新分红送股 ${updateDividend}, 更新股权质押数据 ${updatePledge}，更新指数数据 ${updateIndex}`
     );
     // 首先读取和保存股票列表数据
     let [stockList, indexList] = await updateListData(force);
+
+    if (updateDaily) {
+        await readAndUpdateStockListDailyData(stockList, force);
+    }
 
     if (updateStock) {
         await readAndUpdateStockListInfoData(stockList, force);
@@ -254,6 +259,11 @@ async function readAndUpdateIndexListInfoData(indexList, force) {
         logger.info("指数日线数据更新完毕！");
     }
 }
+
+const stockListDailyApiNames = [
+    stockDataNames.daily,
+    stockDataNames.adjustFactor,
+];
 
 const stockListInfoApiNames = [
     stockDataNames.daily,
@@ -402,6 +412,47 @@ async function readAndUpdateStockListPledgeData(stockList) {
                 logger.debug("个股股权质押数据更新队列全部执行完毕！");
             } catch (error) {
                 logger.error(`个股股权质押数据更新任务执行 错误！${error}`);
+            }
+        }
+    }
+}
+
+/**
+ * 读取并更新个股日线数据
+ * @param {Array} stockList 个股列表
+ * @param {boolean} force 是否强制更新
+ */
+async function readAndUpdateStockListDailyData(stockList, force) {
+    let stockBasicData = stockList && stockList.data;
+    if (stockBasicData && stockBasicData.length > 0) {
+        let totalStockWorkers = [];
+        logger.info("个股日线数据更新准备...");
+        for (let i = 0; i < stockBasicData.length; i++) {
+            for (let j = 0; j < stockListDailyApiNames.length; j++) {
+                totalStockWorkers.push({
+                    caller: updateStockInfoData,
+                    args: [
+                        stockListInfoApiNames[j],
+                        stockBasicData[i].ts_code,
+                        force,
+                    ],
+                });
+            }
+        }
+        logger.info("个股日线数据更新准备完毕！");
+        if (totalStockWorkers && totalStockWorkers.length > 0) {
+            let workers = executeTasks(
+                totalStockWorkers,
+                30,
+                "个股日线数据更新任务"
+            );
+            try {
+                logger.debug("等待个股日线数据更新队列完成...");
+                await Promise.all(workers);
+                logger.info(tushare.showInfo());
+                logger.debug("个股日线数据更新队列全部执行完毕！");
+            } catch (error) {
+                logger.error(`个股日线数据更新任务执行 错误！${error}`);
             }
         }
     }
